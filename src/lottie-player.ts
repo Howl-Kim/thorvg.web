@@ -22,7 +22,6 @@
 
 import { html, PropertyValueMap, LitElement, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import { v4 as uuidv4 } from 'uuid';
 
 // @ts-ignore: WASM Glue code doesn't have type & Only available on build progress
 import Module from '../dist/thorvg-wasm';
@@ -418,7 +417,7 @@ export class LottiePlayer extends LitElement {
   protected firstUpdated(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>): void {
     this._canvas = this.querySelector('.thorvg') as HTMLCanvasElement;
     
-    this._canvas.id = `thorvg-${uuidv4().replaceAll('-', '').substring(0, 6)}`;
+    this._canvas.id = `thorvg-${self.crypto.randomUUID().replaceAll('-', '').substring(0, 6)}`;
     this._canvas.width = this._canvas.offsetWidth;
     this._canvas.height = this._canvas.offsetHeight;
 
