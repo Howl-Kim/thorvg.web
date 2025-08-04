@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CanvasKit } from "canvaskit-wasm";
-import { v4 as uuidv4 } from 'uuid';
 
 let canvasKit: CanvasKit | undefined = undefined;
 export const setCanvasKit = (ck: CanvasKit) => {
@@ -31,7 +30,7 @@ export default function Skottie ({ lottieURL, width, height }: Props) {
     }
     initialized = true;
 
-    const id = uuidv4();
+    const id = useId();
     setId(id);
 
     const dpr = window.devicePixelRatio || 1;
