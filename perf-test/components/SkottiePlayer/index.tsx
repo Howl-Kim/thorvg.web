@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 import { CanvasKit } from "canvaskit-wasm";
 
 let canvasKit: CanvasKit | undefined = undefined;
@@ -17,9 +17,9 @@ interface Props {
 
 export default function Skottie ({ lottieURL, width, height }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [id, setId] = useState<string>('');
+  const id = useId();
   let initialized = false;
-
+  
   useEffect(() => {
     load();
   }, []);
@@ -29,9 +29,6 @@ export default function Skottie ({ lottieURL, width, height }: Props) {
       return;
     }
     initialized = true;
-
-    const id = useId();
-    setId(id);
 
     const dpr = window.devicePixelRatio || 1;
 
