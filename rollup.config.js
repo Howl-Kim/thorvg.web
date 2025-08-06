@@ -16,6 +16,7 @@ const globals = {
 };
 
 export default [
+  // 기존 lottie-player 빌드
   {
     input: "./src/lottie-player.ts",
     treeshake: {
@@ -100,5 +101,53 @@ export default [
     plugins: [
       dts(),
     ],
+  },
+
+  // Worker 플레이어 빌드
+  {
+    input: "./src/lottie-worker-player.ts",
+    output: {
+      format: 'es',
+      file: './dist/lottie-worker-player.js',
+      sourcemap: true
+    },
+    plugins: [
+      swc({
+        jsc: {
+          parser: {
+            syntax: 'typescript',
+            decorators: true,
+          },
+          target: 'es2017',
+        },
+      }),
+      nodeResolve(),
+      commonjs(),
+      terser()
+    ]
+  },
+
+  // Worker 스크립트 빌드
+  {
+    input: "./src/worker/lottie-worker.ts",
+    output: {
+      format: 'es',
+      file: './dist/lottie-worker.js',
+      sourcemap: true
+    },
+    plugins: [
+      swc({
+        jsc: {
+          parser: {
+            syntax: 'typescript',
+            decorators: true,
+          },
+          target: 'es2017',
+        },
+      }),
+      nodeResolve(),
+      commonjs(),
+      terser()
+    ]
   }
 ];

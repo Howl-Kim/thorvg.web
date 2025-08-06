@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>ThorVG Lottie Player</title>
+    <meta name="description" content="A web lottie player using ThorVG as a renderer" />
+    <script src="../dist/lottie-player.js"></script>
+    <script type="module" src="../dist/lottie-worker-player.js"></script>
+  </head>
+  <body>
+    <h1>ThorVG Worker POC 테스트</h1>
+    
+    <div style="margin: 20px 0;">
+      <button id="startMainThreadLoad" style="padding: 10px 20px; font-size: 16px; background: #ff6b6b; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        메인 스레드 부하 시작 (5초간)
+      </button>
+      <button id="stopMainThreadLoad" style="padding: 10px 20px; font-size: 16px; background: #51cf66; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">
+        메인 스레드 부하 중지
+      </button>
+      <span id="loadStatus" style="margin-left: 20px; font-weight: bold;"></span>
+    </div>
+
+    <div style="display: flex; gap: 40px; margin-top: 20px;">
+      <div style="text-align: center;">
+        <h3>일반 버전 (메인 스레드)</h3>
+        <div class="lottie1" style="border: 2px solid #333; background: #f0f0f0;"></div>
+        <div id="normalStatus" style="margin-top: 10px; font-size: 14px; color: #666;">로딩 중...</div>
+      </div>
+      
+      <div style="text-align: center;">
+        <h3>Worker 버전 (오프스크린)</h3>
+        <div class="lottie2" style="border: 2px solid #333; background: #f0f0f0;"></div>
+        <div id="workerStatus" style="margin-top: 10px; font-size: 14px; color: #666;">준비 중...</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+      <h4>테스트 방법:</h4>
+      <ol>
+        <li>두 애니메이션이 모두 실행되기를 기다립니다</li>
+        <li>"메인 스레드 부하 시작" 버튼을 클릭합니다</li>
+        <li>일반 버전은 끊기거나 느려지고, Worker 버전은 부드럽게 계속 렌더링되는지 확인합니다</li>
+      </ol>
+    </div>
+    <script>
+      let lottiePlayer;
+      let isLoadRunning = false;
+      let loadInterval;
+
+      window.addEventListener("load", createLottiePlayer);
+
+      function createLottiePlayer() {
+        if (lottiePlayer) {
+          alert('lottiePlayer already exists');
+          return;
+        }
+
+        const lottie = document.querySelector('.lottie1');
+        lottiePlayer = document.createElement('lottie-player');
+
+        lottiePlayer.autoPlay = true;
+        lottiePlayer.loop = true;
+        lottiePlayer.src = "https://lottie.host/6d7dd6e2-ab92-4e98-826a-2f8430768886/NGnHQ6brWA.json";
+        lottiePlayer.style.width = "200px";
+        lottiePlayer.style.height = "200px";
+
+        // 로드 이벤트 리스너 추가
+        lottiePlayer.addEventListener('load', () => {
+          document.getElementById('normalStatus').textContent = '재생 중 (일반 버전)';
+          document.getElementById('normalStatus').style.color = '#28a745';
+        });
+
+        lottiePlayer.addEventListener('error', () => {
+          document.getElementById('normalStatus').textContent = '에러 발생';
+          document.getElementById('normalStatus').style.color = '#dc3545';
+        });
+
+        lottie.appendChild(lottiePlayer);
+      }
+
+      // 메인 스레드 부하 함수
+      function createMainThreadLoad() {
+        const startTime = Date.now();
+        const duration = 5000; // 5초
+        
+        function heavyComputation() {
+          const computeStart = Date.now();
+          // CPU 집약적인 계산 (약 100ms)
+          let result = 0;
+          for (let i = 0; i < 5000000; i++) {
+            result += Math.sqrt(i) * Math.sin(i) * Math.cos(i);
+          }
+          
+          const elapsed = Date.now() - startTime;
+          if (elapsed < duration && isLoadRunning) {
+            document.getElementById('loadStatus').textContent = `메인 스레드 부하 중... (${Math.floor((duration - elapsed) / 1000) + 1}초 남음)`;
+            // 다음 프레임에서 다시 실행
+            requestAnimationFrame(heavyComputation);
+          } else {
+            stopMainThreadLoad();
+          }
+        }
+        
+        isLoadRunning = true;
+        document.getElementById('startMainThreadLoad').disabled = true;
+        heavyComputation();
+      }
+
+      function stopMainThreadLoad() {
+        isLoadRunning = false;
+        document.getElementById('loadStatus').textContent = '';
+        document.getElementById('startMainThreadLoad').disabled = false;
+      }
+
+      // 버튼 이벤트 리스너
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('startMainThreadLoad').addEventListener('click', createMainThreadLoad);
+        document.getElementById('stopMainThreadLoad').addEventListener('click', stopMainThreadLoad);
+      });
+    </script>
+    <script>
+      // Worker 버전 초기화
+      document.addEventListener('DOMContentLoaded', () => {
+        const workerStatus = document.getElementById('workerStatus');
+        const lottie2 = document.querySelector('.lottie2');
+        
+        
+        try {
+          // Worker 플레이어 엘리먼트 생성
+          const workerPlayer = document.createElement('lottie-worker-player');
+          
+          // 설정
+          workerPlayer.src = 'https://lottie.host/6d7dd6e2-ab92-4e98-826a-2f8430768886/NGnHQ6brWA.json';
+          workerPlayer.autoPlay = true;
+          workerPlayer.loop = true;
+          workerPlayer.style.width = '200px';
+          workerPlayer.style.height = '200px';
+          
+          // 이벤트 리스너 등록
+          workerPlayer.addEventListener('load', () => {
+            workerStatus.textContent = '재생 중 (Worker 버전)';
+            workerStatus.style.color = '#28a745';
+          });
+          
+          workerPlayer.addEventListener('play', () => {
+          });
+          
+          workerPlayer.addEventListener('error', (e) => {
+            console.error('[Worker] Error:', e.detail);
+            workerStatus.textContent = '에러 발생';
+            workerStatus.style.color = '#dc3545';
+          });
+          
+          // 컨테이너에 추가
+          lottie2.appendChild(workerPlayer);
+          workerStatus.textContent = '로딩 중 (Worker 버전)...';
+          
+        } catch (error) {
+          console.error('[Worker] Initialization failed:', error);
+          workerStatus.textContent = 'Worker 초기화 실패';
+          workerStatus.style.color = '#dc3545';
+        }
+      });
+    </script>
+  </body>
+</html>
