@@ -13,6 +13,49 @@ import skottieWasmUrl from "../node_modules/canvaskit-wasm/bin/full/canvaskit.wa
 import InitCanvasKit from 'canvaskit-wasm/bin/full/canvaskit';
 import wasmUrl from "../node_modules/@thorvg/lottie-player/dist/thorvg-wasm.wasm";
 
+// Local GPU detection functions (will be replaced with library exports later)
+const checkWebGPUSupport = async (): Promise<boolean> => {
+  try {
+    if (!('gpu' in navigator)) {
+      return false;
+    }
+    
+    const gpu = (navigator as any).gpu;
+    const adapter = await gpu.requestAdapter();
+    if (!adapter) {
+      return false;
+    }
+    
+    // Try to create a device to verify full WebGPU support
+    const device = await adapter.requestDevice();
+    device.destroy();
+    return true;
+  } catch (error) {
+    console.warn('WebGPU support check failed:', error);
+    return false;
+  }
+};
+
+const checkWebGLSupport = (): boolean => {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    return !!gl;
+  } catch (error) {
+    console.warn('WebGL support check failed:', error);
+    return false;
+  }
+};
+
+const checkGPUSupport = async (): Promise<{ webgpu: boolean; webgl: boolean }> => {
+  const [webgpu, webgl] = await Promise.all([
+    checkWebGPUSupport(),
+    Promise.resolve(checkWebGLSupport())
+  ]);
+  
+  return { webgpu, webgl };
+};
+
 setDotLottieWasmUrl(dotLottieWasmUrl);
 
 const animations = [
@@ -130,13 +173,25 @@ const countOptions = [
   //{ id: 6, name: 1000 },
 ];
 
-const playerOptions = [
-  { id: 1, name: 'ThorVG(Software)' },
-  { id: 2, name: 'ThorVG(WebGPU)' },
+// Function to create player options based on GPU support
+const createPlayerOptions = (gpuSupport: { webgpu: boolean; webgl: boolean }) => {
+  const options = [
+    { id: 1, name: 'ThorVG(Software)', available: true }
+  ];
+  
+  if (gpuSupport.webgpu) {
+    options.push({ id: 2, name: 'ThorVG(WebGPU)', available: true });
+  } else {
+    options.push({ id: 2, name: 'ThorVG(WebGPU) - Not Supported', available: false });
+  }
+  
+  // Commented out other players for now
   //{ id: 3, name: `dotlottie-web@${dotLottieReactPkg.dependencies["@lottiefiles/dotlottie-web"]}` },
   //{ id: 4, name: `lottie-web@${reactLottiePlayerPkg.dependencies["lottie-web"]}` },
   //{ id: 5, name: 'skia/skottie' },
-];
+  
+  return options;
+};
 
 function classNames(...classes: any) {
   return classes.filter(Boolean).join(' ')
@@ -153,10 +208,12 @@ export default function Home() {
   let initialized = false;
   
   const [count, setCount] = useState(countOptions[1]);
-  const [player, setPlayer] = useState(playerOptions[0]);
+  const [playerOptions, setPlayerOptions] = useState([{ id: 1, name: 'ThorVG(Software)', available: true }]);
+  const [player, setPlayer] = useState({ id: 1, name: 'ThorVG(Software)', available: true });
   const [playerId, setPlayerId] = useState(1);
   const [text, setText] = useState('');
   const [animationList, setAnimationList] = useState<any>([]);
+  const [gpuSupport, setGpuSupport] = useState({ webgpu: false, webgl: false });
 
   useEffect(() => {
     if (initialized) {
@@ -164,46 +221,69 @@ export default function Home() {
     }
     initialized = true;
 
-    // @ts-ignore
-    import("@thorvg/lottie-player");
+    // Initialize GPU support checking and player options
+    const initializeAsync = async () => {
+      // @ts-ignore
+      await import("@thorvg/lottie-player");
+      
+      // Check GPU support
+      const support = await checkGPUSupport();
+      setGpuSupport(support);
+      
+      // Create player options based on GPU support
+      const options = createPlayerOptions(support);
+      setPlayerOptions(options);
 
-    let count: number = countOptions[1].name;
-    let seed: string = '';
-    let playerId = 1;
+      let count: number = countOptions[1].name;
+      let seed: string = '';
+      let playerId = 1;
 
-    if (window.location.search) {
-      const params = new URLSearchParams(window.location.search);
-      const player = params.get('player');
-      count = parseInt(params.get('count') ?? '20');
-      seed = params.get('seed') ?? '';
+      if (window.location.search) {
+        const params = new URLSearchParams(window.location.search);
+        const player = params.get('player');
+        count = parseInt(params.get('count') ?? '20');
+        seed = params.get('seed') ?? '';
 
-      if (count) {
-        const _count = countOptions.find((c) => c.name === count) || countOptions[1];
-        setCount(_count);
+        if (count) {
+          const _count = countOptions.find((c) => c.name === count) || countOptions[1];
+          setCount(_count);
+        }
+
+        if (player) {
+          const _player = options.find((p) => p.name === player) || options[0];
+          playerId = _player.id;
+          // Only set the player if it's available, otherwise fallback to software
+          if (_player.available) {
+            setPlayer(_player);
+            setPlayerId(_player.id);
+          } else {
+            setPlayer(options[0]); // Fallback to software
+            setPlayerId(options[0].id);
+          }
+        } else {
+          setPlayer(options[0]);
+        }
+      } else {
+        setPlayer(options[0]);
       }
+      
+      setTimeout(async () => {
+        if (playerId === 4) {
+          await loadCanvasKit();
+        }
 
-      if (player) {
-        const _player = playerOptions.find((p) => p.name === player) || playerOptions[0];
-        playerId = _player.id;
-        setPlayer(_player);
-        setPlayerId(_player.id);
-      }
-    }
-    
-    setTimeout(async () => {
-      if (playerId === 4) {
-        await loadCanvasKit();
-      }
+        loadProfiler();
 
-      loadProfiler();
+        if (seed) {
+          loadSeed(seed);
+          return;
+        }
 
-      if (seed) {
-        loadSeed(seed);
-        return;
-      }
+        loadAnimationByCount(count);
+      }, 500);
+    };
 
-      loadAnimationByCount(count);
-    }, 500);
+    initializeAsync();
   }, []);
 
   const loadCanvasKit = async () => {
@@ -285,8 +365,12 @@ export default function Home() {
             <h1 className='text-justify text-center text-white leading-[52px] sm:block hidden'>Player: </h1>
 
             <Listbox value={player} onChange={(v) => {
-              setPlayer(v);
-              setQueryStringParameter('player', v.name);
+              // Only allow selection of available players
+              if (v.available) {
+                setPlayer(v);
+                setPlayerId(v.id);
+                setQueryStringParameter('player', v.name);
+              }
             }}>
       {({ open }) => (
         <>
@@ -311,15 +395,21 @@ export default function Home() {
                     key={player.id}
                     className={({ active }: any) =>
                       classNames(
-                        active ? 'bg-indigo-600 text-white' : 'text-gray-900',
-                        'relative cursor-default select-none py-2 pl-3 pr-9'
+                        active && player.available ? 'bg-indigo-600 text-white' : 'text-gray-900',
+                        !player.available ? 'text-gray-400 cursor-not-allowed' : 'cursor-default',
+                        'relative select-none py-2 pl-3 pr-9'
                       )
                     }
                     value={player}
+                    disabled={!player.available}
                   >
                     {({ selected, active }) => (
                       <>
-                        <span className={classNames(selected ? 'font-semibold' : 'font-normal', 'block truncate')}>
+                        <span className={classNames(
+                          selected ? 'font-semibold' : 'font-normal', 
+                          !player.available ? 'text-gray-400' : '',
+                          'block truncate'
+                        )}>
                           {player.name}
                         </span>
 

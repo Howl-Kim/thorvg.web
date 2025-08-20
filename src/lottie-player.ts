@@ -99,6 +99,7 @@ export enum PlayerEvent {
   Play = 'play',
   Ready = 'ready',
   Stop = 'stop',
+  RendererFallback = 'rendererFallback', // New event for when renderer falls back
 }
 
 const _parseLottieFromURL = async (url: string): Promise<LottieJson> => {
@@ -162,6 +163,49 @@ const _parseSrc = async (src: string | object | ArrayBuffer, fileType: FileType)
 
 const _wait = (timeToDelay: number) => {
   return new Promise((resolve) => setTimeout(resolve, timeToDelay))
+};
+
+// GPU feature detection utilities
+export const checkWebGPUSupport = async (): Promise<boolean> => {
+  try {
+    if (!('gpu' in navigator)) {
+      return false;
+    }
+    
+    const gpu = (navigator as any).gpu;
+    const adapter = await gpu.requestAdapter();
+    if (!adapter) {
+      return false;
+    }
+    
+    // Try to create a device to verify full WebGPU support
+    const device = await adapter.requestDevice();
+    device.destroy();
+    return true;
+  } catch (error) {
+    console.warn('WebGPU support check failed:', error);
+    return false;
+  }
+};
+
+export const checkWebGLSupport = (): boolean => {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    return !!gl;
+  } catch (error) {
+    console.warn('WebGL support check failed:', error);
+    return false;
+  }
+};
+
+export const checkGPUSupport = async (): Promise<{ webgpu: boolean; webgl: boolean }> => {
+  const [webgpu, webgl] = await Promise.all([
+    checkWebGPUSupport(),
+    Promise.resolve(checkWebGLSupport())
+  ]);
+  
+  return { webgpu, webgl };
 };
 
 const _downloadFile = (fileName: string, blob: Blob) => {
@@ -319,6 +363,14 @@ export class LottiePlayer extends LitElement {
     return Float32Array.from(this._TVG?.size() || [0, 0]);
   }
 
+  /**
+   * Get the actual renderer being used (after any fallbacks)
+   * @since 1.0
+   */
+  public get actualRenderer(): Renderer | undefined {
+    return this._actualRenderer;
+  }
+
   private _TVG?: TvgModule;
   private _canvas?: HTMLCanvasElement;
   private _imageData?: ImageData;
@@ -327,6 +379,7 @@ export class LottiePlayer extends LitElement {
   private _timer?: ReturnType<typeof setInterval>;
   private _observer?: IntersectionObserver;
   private _observable: boolean = false;
+  private _actualRenderer?: Renderer;
 
   private async _init(): Promise<void> {
     // Ensure module is loaded only once
@@ -356,16 +409,64 @@ export class LottiePlayer extends LitElement {
     clearInterval(this._timer);
     this._timer = undefined;
 
-    const engine = this.renderConfig?.renderer || Renderer.SW;
+    let engine = this.renderConfig?.renderer || Renderer.SW;
+    let originalEngine = engine;
 
+    // Try to initialize with the requested engine, with automatic fallback
+    let success = false;
     await _initModule(engine);
-    if (_initStatus === InitStatus.FAILED) {
+    success = (_initStatus as InitStatus) !== InitStatus.FAILED;
+    
+    if (!success) {
+      // If WebGPU failed, try WebGL fallback
+      if (engine === Renderer.WG) {
+        console.warn('WebGPU initialization failed, trying WebGL fallback...');
+        engine = Renderer.GL;
+        _initStatus = InitStatus.IDLE; // Reset status for retry
+        await _initModule(engine);
+        success = (_initStatus as InitStatus) !== InitStatus.FAILED;
+        
+        if (!success) {
+          // If WebGL also failed, fallback to software renderer
+          console.warn('WebGL initialization failed, falling back to software renderer...');
+          engine = Renderer.SW;
+          _initStatus = InitStatus.IDLE; // Reset status for retry
+          await _initModule(engine);
+          success = (_initStatus as InitStatus) !== InitStatus.FAILED;
+        }
+      }
+      // If WebGL failed, try software fallback
+      else if (engine === Renderer.GL) {
+        console.warn('WebGL initialization failed, falling back to software renderer...');
+        engine = Renderer.SW;
+        _initStatus = InitStatus.IDLE; // Reset status for retry
+        await _initModule(engine);
+        success = (_initStatus as InitStatus) !== InitStatus.FAILED;
+      }
+    }
+    
+    // If still failed even with software renderer, that's a real error
+    if (!success) {
       this.currentState = PlayerState.Error;
-      this.dispatchEvent(new CustomEvent(PlayerEvent.Error));
+      this.dispatchEvent(new CustomEvent(PlayerEvent.Error, {
+        detail: { message: 'Failed to initialize any renderer' }
+      }));
       return;
+    }
+    
+    // Notify about fallback if we changed renderer
+    if (engine !== originalEngine) {
+      this.dispatchEvent(new CustomEvent(PlayerEvent.RendererFallback, {
+        detail: { 
+          requestedRenderer: originalEngine, 
+          fallbackRenderer: engine,
+          message: `Fallback from ${originalEngine} to ${engine} renderer`
+        }
+      }));
     }
 
     this._TVG = new _module.TvgLottieAnimation(engine, `#${this._canvas!.id}`);
+    this._actualRenderer = engine; // Track the actual renderer being used
 
     if (this.src) {
       this.load(this.src, this.fileType);
