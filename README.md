@@ -292,6 +292,65 @@ player.addEventListener('load', () => {
 
 **Return Type** : `LibraryVersion`
 
+---
+
+**Method** : `checkWebGPUSupport()`
+
+**Purpose** : Check if WebGPU is available and functional in the current browser
+
+**Return Type** : `Promise<boolean>`
+
+---
+
+**Method** : `checkWebGLSupport()`
+
+**Purpose** : Check if WebGL is available in the current browser
+
+**Return Type** : `boolean`
+
+---
+
+**Method** : `checkGPUSupport()`
+
+**Purpose** : Check both WebGPU and WebGL support simultaneously
+
+**Return Type** : `Promise<{ webgpu: boolean; webgl: boolean }>`
+
+---
+
+**Property** : `actualRenderer`
+
+**Purpose** : Get the actual renderer being used after any automatic fallbacks
+
+**Return Type** : `Renderer | undefined`
+
+## GPU Compatibility and Automatic Fallback
+
+The lottie-player now includes automatic GPU compatibility checking and fallback functionality:
+
+- **Automatic Fallback**: When WebGPU fails to initialize, the player automatically falls back to WebGL, and then to Software rendering if needed
+- **Compatibility Detection**: Use the exported functions to check GPU support before initializing players
+- **Fallback Events**: Listen for `rendererFallback` events to be notified when the renderer changes due to compatibility issues
+
+### Example Usage
+
+```js
+import { checkGPUSupport } from '@thorvg/lottie-player';
+
+// Check GPU support before creating players
+const support = await checkGPUSupport();
+console.log('WebGPU supported:', support.webgpu);
+console.log('WebGL supported:', support.webgl);
+
+// Listen for fallback events
+player.addEventListener('rendererFallback', (event) => {
+  console.log(`Renderer fallback: ${event.detail.requestedRenderer} → ${event.detail.fallbackRenderer}`);
+});
+
+// Check actual renderer after initialization
+console.log('Using renderer:', player.actualRenderer);
+```
+
 ## Examples
 
 Please check these examples in various environments.
