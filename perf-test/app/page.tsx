@@ -176,13 +176,12 @@ const countOptions = [
 // Function to create player options based on GPU support
 const createPlayerOptions = (gpuSupport: { webgpu: boolean; webgl: boolean }) => {
   const options = [
-    { id: 1, name: 'ThorVG(Software)', available: true }
+    { id: 1, name: 'ThorVG(Software)' }
   ];
   
+  // Only add WebGPU option if it's actually supported
   if (gpuSupport.webgpu) {
-    options.push({ id: 2, name: 'ThorVG(WebGPU)', available: true });
-  } else {
-    options.push({ id: 2, name: 'ThorVG(WebGPU) - Not Supported', available: false });
+    options.push({ id: 2, name: 'ThorVG(WebGPU)' });
   }
   
   // Commented out other players for now
@@ -208,8 +207,8 @@ export default function Home() {
   let initialized = false;
   
   const [count, setCount] = useState(countOptions[1]);
-  const [playerOptions, setPlayerOptions] = useState([{ id: 1, name: 'ThorVG(Software)', available: true }]);
-  const [player, setPlayer] = useState({ id: 1, name: 'ThorVG(Software)', available: true });
+  const [playerOptions, setPlayerOptions] = useState([{ id: 1, name: 'ThorVG(Software)' }]);
+  const [player, setPlayer] = useState({ id: 1, name: 'ThorVG(Software)' });
   const [playerId, setPlayerId] = useState(1);
   const [text, setText] = useState('');
   const [animationList, setAnimationList] = useState<any>([]);
@@ -252,14 +251,8 @@ export default function Home() {
         if (player) {
           const _player = options.find((p) => p.name === player) || options[0];
           playerId = _player.id;
-          // Only set the player if it's available, otherwise fallback to software
-          if (_player.available) {
-            setPlayer(_player);
-            setPlayerId(_player.id);
-          } else {
-            setPlayer(options[0]); // Fallback to software
-            setPlayerId(options[0].id);
-          }
+          setPlayer(_player);
+          setPlayerId(_player.id);
         } else {
           setPlayer(options[0]);
         }
@@ -365,12 +358,9 @@ export default function Home() {
             <h1 className='text-justify text-center text-white leading-[52px] sm:block hidden'>Player: </h1>
 
             <Listbox value={player} onChange={(v) => {
-              // Only allow selection of available players
-              if (v.available) {
-                setPlayer(v);
-                setPlayerId(v.id);
-                setQueryStringParameter('player', v.name);
-              }
+              setPlayer(v);
+              setPlayerId(v.id);
+              setQueryStringParameter('player', v.name);
             }}>
       {({ open }) => (
         <>
@@ -395,19 +385,16 @@ export default function Home() {
                     key={player.id}
                     className={({ active }: any) =>
                       classNames(
-                        active && player.available ? 'bg-indigo-600 text-white' : 'text-gray-900',
-                        !player.available ? 'text-gray-400 cursor-not-allowed' : 'cursor-default',
-                        'relative select-none py-2 pl-3 pr-9'
+                        active ? 'bg-indigo-600 text-white' : 'text-gray-900',
+                        'relative cursor-default select-none py-2 pl-3 pr-9'
                       )
                     }
                     value={player}
-                    disabled={!player.available}
                   >
                     {({ selected, active }) => (
                       <>
                         <span className={classNames(
                           selected ? 'font-semibold' : 'font-normal', 
-                          !player.available ? 'text-gray-400' : '',
                           'block truncate'
                         )}>
                           {player.name}
